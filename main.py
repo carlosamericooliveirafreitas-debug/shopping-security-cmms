@@ -657,7 +657,7 @@ async def root():
 # ============================================================================
 @app.post("/auth/login")
 async def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(Usuario).filter(Usuario.email == form.username).first()
+    user = db.query(Usuario).filter((Usuario.email == form.username) | (Usuario.nome == form.username)).first()
     if not user or not verify_password(form.password, user.senha_hash):
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
     if not user.ativo:
