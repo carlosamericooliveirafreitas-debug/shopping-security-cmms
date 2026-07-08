@@ -1,24 +1,28 @@
-# -*- coding: utf-8 -*-
-"""
-Sistema de Gestão de Segurança para Shopping Center
-FastAPI + SQLite
-"""
-import os
-from datetime import datetime, date, timedelta
-from typing import Optional, List, Dict, Any
+# app.py - Sistema de Gestão de Segurança - Shopping Center
+# Corrigido para Railway: drop_all/create_all, Historico.data como String, endpoints async com request.json()
 
-from fastapi import FastAPI, HTTPException, Depends, Query
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+import os
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from fastapi import FastAPI, Request, Query
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean, DateTime
-from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from sqlalchemy import (
+    create_engine, Column, Integer, String, Text, Boolean,
+)
+from sqlalchemy.orm import sessionmaker, declarative_base
+import uvicorn
 
 # -----------------------------------------------------------------------------
 # Configuração
 # -----------------------------------------------------------------------------
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./seguranca_shopping.db")
-PORT = int(os.environ.get("PORT", 8080))
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./seguranca.db")
+# Railway entrega postgres://, SQLAlchemy precisa de postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+PORT = int(os.environ.get("PORT", 8000))
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -27,6 +31,7 @@ Base = declarative_base()
 # -----------------------------------------------------------------------------
 # Modelos
 # -----------------------------------------------------------------------------
+
 class Extintor(Base):
     __tablename__ = "extintores"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -47,6 +52,7 @@ class Extintor(Base):
     status = Column(String, default="")
     observacoes = Column(Text, default="")
 
+
 class Mangueira(Base):
     __tablename__ = "mangueiras"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -63,6 +69,7 @@ class Mangueira(Base):
     status = Column(String, default="")
     observacoes = Column(Text, default="")
 
+
 class VGA(Base):
     __tablename__ = "vgas"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -75,6 +82,7 @@ class VGA(Base):
     situacao = Column(String, default="")
     status = Column(String, default="")
     observacoes = Column(Text, default="")
+
 
 class Abrigo(Base):
     __tablename__ = "abrigos"
@@ -100,6 +108,7 @@ class Abrigo(Base):
     tem_sinalizacao = Column(String, default="")
     observacoes = Column(Text, default="")
 
+
 class OutroEquipamento(Base):
     __tablename__ = "outros_equipamentos"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -111,8 +120,9 @@ class OutroEquipamento(Base):
     status = Column(String, default="")
     observacoes = Column(Text, default="")
 
+
 class KitCrise(Base):
-    __tablename__ = "kit_crise"
+    __tablename__ = "kits_crise"
     id = Column(Integer, primary_key=True, autoincrement=True)
     item = Column(String, default="")
     quantidade = Column(String, default="")
@@ -121,8 +131,9 @@ class KitCrise(Base):
     situacao = Column(String, default="")
     validade = Column(String, default="")
 
+
 class SDAI(Base):
-    __tablename__ = "sdai"
+    __tablename__ = "sdais"
     id = Column(Integer, primary_key=True, autoincrement=True)
     codigo = Column(String, default="")
     central_alarme = Column(String, default="")
@@ -138,8 +149,9 @@ class SDAI(Base):
     falhas = Column(Text, default="")
     observacoes = Column(Text, default="")
 
+
 class CFTV(Base):
-    __tablename__ = "cftv"
+    __tablename__ = "cftvs"
     id = Column(Integer, primary_key=True, autoincrement=True)
     codigo = Column(String, default="")
     tipo = Column(String, default="")
@@ -151,6 +163,7 @@ class CFTV(Base):
     garantia = Column(String, default="")
     data_manutencao = Column(String, default="")
     observacoes = Column(Text, default="")
+
 
 class Loja(Base):
     __tablename__ = "lojas"
@@ -167,6 +180,7 @@ class Loja(Base):
     grau_risco = Column(String, default="")
     observacoes = Column(Text, default="")
 
+
 class Escada(Base):
     __tablename__ = "escadas"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -181,6 +195,7 @@ class Escada(Base):
     data_inspecao = Column(String, default="")
     observacoes = Column(Text, default="")
 
+
 class Tarefa(Base):
     __tablename__ = "tarefas"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -191,8 +206,9 @@ class Tarefa(Base):
     vencimento = Column(String, default="")
     responsavel = Column(String, default="")
     resolvido = Column(Boolean, default=False)
-    criado_em = Column(DateTime, default=datetime.utcnow)
-    concluido_em = Column(DateTime, nullable=True)
+    criado_em = Column(String, default=lambda: datetime.now().isoformat())
+    concluido_em = Column(String, nullable=True)
+
 
 class Time(Base):
     __tablename__ = "times"
@@ -208,6 +224,7 @@ class Time(Base):
     escala = Column(String, default="")
     observacoes = Column(Text, default="")
 
+
 class Documento(Base):
     __tablename__ = "documentos"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -218,6 +235,7 @@ class Documento(Base):
     orgao_emissor = Column(String, default="")
     arquivo_url = Column(String, default="")
     observacoes = Column(Text, default="")
+
 
 class Ocorrencia(Base):
     __tablename__ = "ocorrencias"
@@ -231,6 +249,7 @@ class Ocorrencia(Base):
     providencias = Column(Text, default="")
     status = Column(String, default="")
 
+
 class Contato(Base):
     __tablename__ = "contatos"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -241,14 +260,16 @@ class Contato(Base):
     funcao = Column(String, default="")
     observacoes = Column(Text, default="")
 
+
 class Historico(Base):
-    __tablename__ = "historico"
+    __tablename__ = "historicos"
     id = Column(Integer, primary_key=True, autoincrement=True)
     modulo = Column(String, default="")
     item_id = Column(Integer, default=0)
     acao = Column(String, default="")
-    data = Column(DateTime, default=datetime.utcnow)
+    data = Column(String, default=lambda: datetime.now().isoformat())
     observacoes = Column(Text, default="")
+
 
 # -----------------------------------------------------------------------------
 # Mapeamento de módulos
@@ -259,9 +280,9 @@ MODULES = {
     "vgas": VGA,
     "abrigos": Abrigo,
     "outros_equipamentos": OutroEquipamento,
-    "kit_crise": KitCrise,
-    "sdai": SDAI,
-    "cftv": CFTV,
+    "kits_crise": KitCrise,
+    "sdais": SDAI,
+    "cftvs": CFTV,
     "lojas": Loja,
     "escadas": Escada,
     "tarefas": Tarefa,
@@ -273,32 +294,18 @@ MODULES = {
 
 DUPLICABLE = {"extintores", "mangueiras", "outros_equipamentos"}
 
-# Campos de data_validade por módulo para alertas
-VALIDADE_FIELDS = {
-    "extintores": "data_validade",
-    "mangueiras": "data_validade",
-    "outros_equipamentos": "data_validade",
-    "kit_crise": "validade",
-    "times": "data_validade_certificado",
-    "documentos": "data_validade",
-}
-
 # -----------------------------------------------------------------------------
-# FastAPI
+# App
 # -----------------------------------------------------------------------------
 app = FastAPI(title="Gestão de Segurança - Shopping Center")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 @app.on_event("startup")
 def on_startup():
+    # CORREÇÃO 1: drop_all ANTES de create_all para garantir schema novo
+    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+
 
 def get_db():
     db = SessionLocal()
@@ -307,175 +314,216 @@ def get_db():
     finally:
         db.close()
 
-def model_to_dict(obj) -> Dict[str, Any]:
-    d = {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
-    for k, v in d.items():
-        if isinstance(v, datetime):
-            d[k] = v.strftime("%Y-%m-%d %H:%M:%S")
-    return d
 
-def reg_historico(db: Session, modulo: str, item_id: int, acao: str, obs: str = ""):
-    h = Historico(modulo=modulo, item_id=item_id, acao=acao, observacoes=obs)
-    db.add(h)
-    db.commit()
+def model_to_dict(obj: Any) -> Dict[str, Any]:
+    # CORREÇÃO 4: retornar valores crus sem forçar conversão de datetime
+    result = {}
+    for col in obj.__table__.columns:
+        result[col.name] = getattr(obj, col.name)
+    return result
+
+
+def registrar_historico(db, modulo: str, item_id: int, acao: str, observacoes: str = ""):
+    try:
+        h = Historico(modulo=modulo, item_id=item_id, acao=acao, observacoes=observacoes)
+        db.add(h)
+        db.commit()
+    except Exception:
+        db.rollback()
+
 
 # -----------------------------------------------------------------------------
-# Endpoints genéricos
+# Endpoints genéricos por módulo
 # -----------------------------------------------------------------------------
-@app.get("/api/{modulo}")
-def list_modulo(modulo: str, status: Optional[str] = Query(None), db: Session = Depends(get_db)):
-    if modulo not in MODULES:
-        raise HTTPException(status_code=404, detail="Módulo não encontrado")
-    Model = MODULES[modulo]
-    q = db.query(Model)
-    if status and hasattr(Model, "status"):
-        q = q.filter(Model.status == status)
-    items = q.all()
-    return [model_to_dict(i) for i in items]
 
-@app.post("/api/{modulo}")
-def create_modulo(modulo: str, data: Dict[str, Any], db: Session = Depends(get_db)):
-    if modulo not in MODULES:
-        raise HTTPException(status_code=404, detail="Módulo não encontrado")
-    Model = MODULES[modulo]
-    cols = {c.name for c in Model.__table__.columns}
-    clean = {k: v for k, v in data.items() if k in cols}
-    obj = Model(**clean)
-    db.add(obj)
-    db.commit()
-    db.refresh(obj)
-    reg_historico(db, modulo, obj.id, "criado")
-    return model_to_dict(obj)
+def build_router(modulo: str, model):
+    @app.get(f"/api/{modulo}")
+    async def list_items(status: Optional[str] = Query(None)):
+        db = SessionLocal()
+        try:
+            q = db.query(model)
+            if status and hasattr(model, "status"):
+                q = q.filter(model.status == status)
+            items = q.all()
+            return [model_to_dict(i) for i in items]
+        finally:
+            db.close()
 
-@app.put("/api/{modulo}/{item_id}")
-def update_modulo(modulo: str, item_id: int, data: Dict[str, Any], db: Session = Depends(get_db)):
-    if modulo not in MODULES:
-        raise HTTPException(status_code=404, detail="Módulo não encontrado")
-    Model = MODULES[modulo]
-    obj = db.query(Model).filter(Model.id == item_id).first()
-    if not obj:
-        raise HTTPException(status_code=404, detail="Item não encontrado")
-    cols = {c.name for c in Model.__table__.columns}
-    for k, v in data.items():
-        if k in cols and k != "id":
-            setattr(obj, k, v)
-    db.commit()
-    db.refresh(obj)
-    reg_historico(db, modulo, obj.id, "atualizado")
-    return model_to_dict(obj)
+    @app.post(f"/api/{modulo}")
+    async def create_item(request: Request):
+        db = SessionLocal()
+        try:
+            data = await request.json()
+            obj = model()
+            for key, value in data.items():
+                if hasattr(obj, key):
+                    setattr(obj, key, value)
+            db.add(obj)
+            db.commit()
+            db.refresh(obj)
+            registrar_historico(db, modulo, obj.id, "criacao")
+            return model_to_dict(obj)
+        except Exception as e:
+            db.rollback()
+            return JSONResponse({"error": str(e)}, status_code=400)
+        finally:
+            db.close()
 
-@app.delete("/api/{modulo}/{item_id}")
-def delete_modulo(modulo: str, item_id: int, db: Session = Depends(get_db)):
-    if modulo not in MODULES:
-        raise HTTPException(status_code=404, detail="Módulo não encontrado")
-    Model = MODULES[modulo]
-    obj = db.query(Model).filter(Model.id == item_id).first()
-    if not obj:
-        raise HTTPException(status_code=404, detail="Item não encontrado")
-    db.delete(obj)
-    db.commit()
-    reg_historico(db, modulo, item_id, "excluido")
-    return {"ok": True}
+    @app.put(f"/api/{modulo}/{{item_id}}")
+    async def update_item(item_id: int, request: Request):
+        db = SessionLocal()
+        try:
+            data = await request.json()
+            obj = db.query(model).filter(model.id == item_id).first()
+            if not obj:
+                return JSONResponse({"error": "não encontrado"}, status_code=404)
+            for key, value in data.items():
+                if hasattr(obj, key):
+                    setattr(obj, key, value)
+            db.commit()
+            db.refresh(obj)
+            registrar_historico(db, modulo, obj.id, "atualizacao")
+            return model_to_dict(obj)
+        except Exception as e:
+            db.rollback()
+            return JSONResponse({"error": str(e)}, status_code=400)
+        finally:
+            db.close()
 
-@app.post("/api/{modulo}/{item_id}/duplicar")
-def duplicate_modulo(modulo: str, item_id: int, db: Session = Depends(get_db)):
-    if modulo not in DUPLICABLE:
-        raise HTTPException(status_code=400, detail="Módulo não permite duplicação")
-    Model = MODULES[modulo]
-    obj = db.query(Model).filter(Model.id == item_id).first()
-    if not obj:
-        raise HTTPException(status_code=404, detail="Item não encontrado")
-    data = model_to_dict(obj)
-    data.pop("id", None)
-    if "numero_extintor" in data and data["numero_extintor"]:
-        data["numero_extintor"] = data["numero_extintor"] + " (cópia)"
-    if "numero_mangueira" in data and data["numero_mangueira"]:
-        data["numero_mangueira"] = data["numero_mangueira"] + " (cópia)"
-    if "tipo_equipamento" in data and data["tipo_equipamento"]:
-        data["tipo_equipamento"] = data["tipo_equipamento"] + " (cópia)"
-    new = Model(**data)
-    db.add(new)
-    db.commit()
-    db.refresh(new)
-    reg_historico(db, modulo, new.id, "duplicado", f"origem={item_id}")
-    return model_to_dict(new)
+    @app.delete(f"/api/{modulo}/{{item_id}}")
+    async def delete_item(item_id: int):
+        db = SessionLocal()
+        try:
+            obj = db.query(model).filter(model.id == item_id).first()
+            if not obj:
+                return JSONResponse({"error": "não encontrado"}, status_code=404)
+            db.delete(obj)
+            db.commit()
+            registrar_historico(db, modulo, item_id, "exclusao")
+            return {"ok": True}
+        except Exception as e:
+            db.rollback()
+            return JSONResponse({"error": str(e)}, status_code=400)
+        finally:
+            db.close()
+
+    if modulo in DUPLICABLE:
+        @app.post(f"/api/{modulo}/{{item_id}}/duplicar")
+        async def duplicate_item(item_id: int):
+            db = SessionLocal()
+            try:
+                obj = db.query(model).filter(model.id == item_id).first()
+                if not obj:
+                    return JSONResponse({"error": "não encontrado"}, status_code=404)
+                novo = model()
+                for col in obj.__table__.columns:
+                    if col.name == "id":
+                        continue
+                    setattr(novo, col.name, getattr(obj, col.name))
+                db.add(novo)
+                db.commit()
+                db.refresh(novo)
+                registrar_historico(db, modulo, novo.id, "duplicacao")
+                return model_to_dict(novo)
+            except Exception as e:
+                db.rollback()
+                return JSONResponse({"error": str(e)}, status_code=400)
+            finally:
+                db.close()
+
+
+for modulo, model in MODULES.items():
+    build_router(modulo, model)
+
 
 # -----------------------------------------------------------------------------
 # Dashboard e Alertas
 # -----------------------------------------------------------------------------
 @app.get("/api/dashboard")
-def dashboard(db: Session = Depends(get_db)):
-    counts = {}
-    for name, Model in MODULES.items():
-        counts[name] = db.query(Model).count()
-
-    tarefas_pendentes = db.query(Tarefa).filter(Tarefa.resolvido == False).count()
-
-    hoje = date.today()
-    limite = hoje + timedelta(days=30)
-    total_vencidos = 0
-    for mod, field in VALIDADE_FIELDS.items():
-        Model = MODULES[mod]
-        col = getattr(Model, field)
-        items = db.query(Model).all()
-        for it in items:
-            val = getattr(it, field)
-            if not val:
-                continue
+async def dashboard():
+    db = SessionLocal()
+    try:
+        stats = {}
+        for modulo, model in MODULES.items():
             try:
-                d = datetime.strptime(val[:10], "%Y-%m-%d").date()
-                if d <= limite:
-                    total_vencidos += 1
+                stats[modulo] = db.query(model).count()
             except Exception:
-                continue
+                stats[modulo] = 0
+        # Alertas de vencimento
+        alertas = []
+        hoje = datetime.now().strftime("%Y-%m-%d")
+        for modulo, model in MODULES.items():
+            if hasattr(model, "data_validade"):
+                try:
+                    items = db.query(model).filter(model.data_validade != "", model.data_validade != None).all()
+                    for it in items:
+                        dv = (it.data_validade or "")[:10]
+                        if dv and dv <= hoje:
+                            alertas.append({
+                                "modulo": modulo,
+                                "id": it.id,
+                                "data_validade": it.data_validade,
+                                "descricao": f"{modulo} #{it.id} vencido em {it.data_validade}",
+                            })
+                except Exception:
+                    pass
+        # Últimas movimentações
+        try:
+            hist = db.query(Historico).order_by(Historico.id.desc()).limit(10).all()
+            movimentacoes = [model_to_dict(h) for h in hist]
+        except Exception:
+            movimentacoes = []
+        return {"stats": stats, "alertas": alertas, "movimentacoes": movimentacoes}
+    finally:
+        db.close()
 
-    historico = db.query(Historico).order_by(Historico.data.desc()).limit(10).all()
-    hist_list = []
-    for h in historico:
-        hd = model_to_dict(h)
-        hist_list.append(hd)
-
-    return {
-        "counts": counts,
-        "tarefas_pendentes": tarefas_pendentes,
-        "total_vencidos": total_vencidos,
-        "total_alertas": total_vencidos,
-        "historico": hist_list,
-    }
 
 @app.get("/api/alertas")
-def alertas(db: Session = Depends(get_db)):
-    hoje = date.today()
-    limite = hoje + timedelta(days=30)
-    agrupado: Dict[str, List] = {}
-    for mod, field in VALIDADE_FIELDS.items():
-        Model = MODULES[mod]
-        items = db.query(Model).all()
-        for it in items:
-            val = getattr(it, field)
-            if not val:
-                continue
-            try:
-                d = datetime.strptime(val[:10], "%Y-%m-%d").date()
-            except Exception:
-                continue
-            if d <= limite:
-                d_item = model_to_dict(it)
-                d_item["_campo_validade"] = field
-                d_item["_data_validade"] = val
-                d_item["_vencido"] = d < hoje
-                agrupado.setdefault(mod, []).append(d_item)
-    return agrupado
+async def alertas():
+    db = SessionLocal()
+    try:
+        alertas = []
+        hoje = datetime.now().strftime("%Y-%m-%d")
+        for modulo, model in MODULES.items():
+            if hasattr(model, "data_validade"):
+                try:
+                    items = db.query(model).filter(model.data_validade != "", model.data_validade != None).all()
+                    for it in items:
+                        dv = (it.data_validade or "")[:10]
+                        if dv and dv <= hoje:
+                            alertas.append({
+                                "modulo": modulo,
+                                "id": it.id,
+                                "data_validade": it.data_validade,
+                                "descricao": f"{modulo} #{it.id} vencido em {it.data_validade}",
+                            })
+                except Exception:
+                    pass
+        return alertas
+    finally:
+        db.close()
+
+
+@app.get("/api/historicos")
+async def listar_historicos():
+    db = SessionLocal()
+    try:
+        hist = db.query(Historico).order_by(Historico.id.desc()).limit(50).all()
+        return [model_to_dict(h) for h in hist]
+    finally:
+        db.close()
+
 
 # -----------------------------------------------------------------------------
 # Rota raiz - HTML
 # -----------------------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
-def index():
+async def index():
     return HTML_CONTENT
 
+
 # -----------------------------------------------------------------------------
-# HTML / Frontend
+# HTML Frontend
 # -----------------------------------------------------------------------------
 HTML_CONTENT = r'''<!DOCTYPE html>
 <html lang="pt-BR">
@@ -486,581 +534,530 @@ HTML_CONTENT = r'''<!DOCTYPE html>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
 <style>
-  :root{ --primary:#1e3a5f; --primary-dark:#0f172a; --bg:#f0f2f5; }
-  *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);font-family:'Segoe UI',system-ui,sans-serif;color:#1f2937;}
-  .app-header{
-    background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);
-    color:#fff;padding:22px 28px;box-shadow:0 4px 14px rgba(0,0,0,.25);
-  }
-  .app-header h1{margin:0;font-size:1.6rem;font-weight:700;letter-spacing:.3px;}
-  .app-header p{margin:4px 0 0;opacity:.85;font-size:.9rem;}
-  .nav-tabs-scroll{
-    display:flex;gap:6px;overflow-x:auto;white-space:nowrap;
-    background:#fff;padding:10px 14px;border-bottom:1px solid #e5e7eb;
-    position:sticky;top:0;z-index:100;box-shadow:0 2px 6px rgba(0,0,0,.05);
-  }
-  .nav-tab{
-    padding:8px 16px;border-radius:8px;cursor:pointer;font-size:.9rem;font-weight:600;
-    color:#475569;background:#f1f5f9;border:none;transition:all .2s;
-  }
-  .nav-tab:hover{background:#e2e8f0;}
-  .nav-tab.active{background:var(--primary);color:#fff;}
-  .container-app{max-width:1400px;margin:0 auto;padding:24px;}
-  .card{background:#fff;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.06);border:none;margin-bottom:20px;}
-  .card-header{background:var(--primary);color:#fff;border-radius:12px 12px 0 0 !important;font-weight:600;}
-  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;margin-bottom:24px;}
-  .kpi{background:#fff;border-radius:12px;padding:22px;box-shadow:0 2px 10px rgba(0,0,0,.06);text-align:center;}
-  .kpi .label{font-size:.85rem;color:#64748b;text-transform:uppercase;letter-spacing:.5px;}
-  .kpi .value{font-size:2.2rem;font-weight:700;margin-top:6px;color:var(--primary);}
-  .kpi.danger .value{color:#dc2626;}
-  .kpi.warning .value{color:#d97706;}
-  .kpi.info .value{color:#2563eb;}
-  table{width:100%;border-collapse:collapse;}
-  thead th{background:var(--primary);color:#fff;padding:12px;text-align:left;font-size:.82rem;text-transform:uppercase;letter-spacing:.4px;}
-  thead th:first-child{border-radius:8px 0 0 0;}
-  thead th:last-child{border-radius:0 8px 0 0;}
-  tbody td{padding:11px 12px;border-bottom:1px solid #eef2f7;font-size:.88rem;}
-  tbody tr:hover{background:#f8fafc;}
-  .badge{padding:5px 10px;border-radius:20px;font-size:.75rem;font-weight:600;}
-  .badge-ok{background:#dcfce7;color:#166534;}
-  .badge-warn{background:#fef3c7;color:#92400e;}
-  .badge-danger{background:#fee2e2;color:#991b1b;}
-  .badge-info{background:#dbeafe;color:#1e40af;}
-  .badge-muted{background:#f1f5f9;color:#475569;}
-  .modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:flex-start;justify-content:center;z-index:1000;padding:30px 15px;overflow-y:auto;}
-  .modal-overlay.show{display:flex;animation:fadeIn .2s;}
-  .modal-box{background:#fff;border-radius:14px;max-width:780px;width:100%;padding:26px;box-shadow:0 20px 50px rgba(0,0,0,.3);animation:slideUp .25s;}
-  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-  @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
-  .form-label{font-weight:600;font-size:.85rem;color:#334155;margin-bottom:4px;}
-  .form-select,.form-control{border-radius:8px;border:1px solid #cbd5e1;padding:8px 10px;font-size:.9rem;}
-  .form-select:focus,.form-control:focus{border-color:var(--primary);box-shadow:0 0 0 .2rem rgba(30,58,95,.15);}
-  .btn-primary{background:var(--primary);border-color:var(--primary);}
-  .btn-primary:hover{background:#15293f;border-color:#15293f;}
-  .btn-icon{padding:5px 9px;border-radius:6px;font-size:.8rem;margin-right:4px;}
-  .alert-item{background:#fff;border-left:4px solid #dc2626;border-radius:8px;padding:12px 16px;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,.05);display:flex;justify-content:space-between;align-items:center;}
-  .alert-item.warn{border-left-color:#d97706;}
-  .section-title{font-size:1.1rem;font-weight:700;color:var(--primary);margin:24px 0 12px;}
-  .empty-state{text-align:center;padding:40px;color:#94a3b8;}
-  .table-wrap{overflow-x:auto;border-radius:12px;}
-  @media(max-width:768px){
-    .app-header h1{font-size:1.2rem;}
-    .kpi .value{font-size:1.6rem;}
-  }
+  body { background:#f1f5f9; }
+  .header-bg { background: linear-gradient(135deg,#0f172a,#1e3a5f); color:#fff; padding:18px 20px; }
+  .header-bg h1 { margin:0; font-size:1.5rem; font-weight:700; }
+  .nav-tabs-scroll { overflow-x:auto; white-space:nowrap; background:#fff; border-bottom:1px solid #e2e8f0; }
+  .nav-tabs-scroll .nav-link { display:inline-block; border-radius:0; color:#475569; font-weight:600; padding:12px 18px; }
+  .nav-tabs-scroll .nav-link.active { color:#1e3a5f; border-bottom:3px solid #1e3a5f; background:transparent; }
+  .kpi-card { border:none; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .kpi-card .card-body { padding:18px; }
+  .kpi-num { font-size:1.8rem; font-weight:800; color:#1e3a5f; }
+  .kpi-label { color:#64748b; font-size:.85rem; text-transform:uppercase; letter-spacing:.05em; }
+  .module-card { border:none; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .table thead th { background:#f8fafc; color:#475569; font-size:.8rem; text-transform:uppercase; letter-spacing:.04em; }
+  .btn-sec { background:#1e3a5f; color:#fff; }
+  .btn-sec:hover { background:#0f172a; color:#fff; }
+  .alert-item { border-left:4px solid #dc2626; }
+  .badge-status { font-size:.75rem; }
+  .tab-content { padding:20px; }
+  .modal-body { max-height:70vh; overflow-y:auto; }
 </style>
 </head>
 <body>
-
-<div class="app-header">
+<div class="header-bg">
   <h1>🛡️ Gestão de Segurança - Shopping Center</h1>
-  <p>Sistema integrado de gestão de segurança e combate a incêndio</p>
 </div>
 
-<div class="nav-tabs-scroll" id="navTabs">
-  <button class="nav-tab active" onclick="switchTab('dashboard')">PAINEL</button>
-  <button class="nav-tab" onclick="switchTab('extintores')">Extintores</button>
-  <button class="nav-tab" onclick="switchTab('mangueiras')">Mangueiras</button>
-  <button class="nav-tab" onclick="switchTab('vgas')">VGAs</button>
-  <button class="nav-tab" onclick="switchTab('abrigos')">Abrigos</button>
-  <button class="nav-tab" onclick="switchTab('outros_equipamentos')">Outros Equip.</button>
-  <button class="nav-tab" onclick="switchTab('kit_crise')">Kit Crise</button>
-  <button class="nav-tab" onclick="switchTab('sdai')">SDAI</button>
-  <button class="nav-tab" onclick="switchTab('cftv')">CFTV</button>
-  <button class="nav-tab" onclick="switchTab('lojas')">Lojas</button>
-  <button class="nav-tab" onclick="switchTab('escadas')">Escadas</button>
-  <button class="nav-tab" onclick="switchTab('tarefas')">Tarefas</button>
-  <button class="nav-tab" onclick="switchTab('times')">Times</button>
-  <button class="nav-tab" onclick="switchTab('documentos')">Documentos</button>
-  <button class="nav-tab" onclick="switchTab('ocorrencias')">Ocorrências</button>
-  <button class="nav-tab" onclick="switchTab('contatos')">Contatos</button>
+<ul class="nav nav-tabs nav-tabs-scroll" id="mainTabs" role="tablist">
+  <li class="nav-item"><button class="nav-link active" data-tab="painel">PAINEL</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="extintores">Extintores</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="mangueiras">Mangueiras</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="vgas">VGAs</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="abrigos">Abrigos</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="outros_equipamentos">Outros Equip.</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="kits_crise">Kit Crise</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="sdais">SDAI</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="cftvs">CFTV</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="lojas">Lojas</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="escadas">Escadas</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="tarefas">Tarefas</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="times">Times</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="documentos">Documentos</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="ocorrencias">Ocorrências</button></li>
+  <li class="nav-item"><button class="nav-link" data-tab="contatos">Contatos</button></li>
+</ul>
+
+<div class="tab-content" id="tabContent">
+  <div id="content-area"></div>
 </div>
 
-<div class="container-app" id="appContent"></div>
-
-<div class="modal-overlay" id="modalOverlay">
-  <div class="modal-box" id="modalBox"></div>
+<!-- Modal -->
+<div class="modal fade" id="formModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title" id="modalTitle">Formulário</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="dynamicForm"></form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-sec" onclick="saveItem()">Salvar</button>
+      </div>
+    </div>
+  </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-const MODULE_META = {
-  dashboard:{label:'Painel',icon:'📊'},
-  extintores:{label:'Extintores',icon:'🧯'},
-  mangueiras:{label:'Mangueiras',icon:'🚒'},
-  vgas:{label:'VGAs',icon:'💧'},
-  abrigos:{label:'Abrigos',icon:'🚪'},
-  outros_equipamentos:{label:'Outros Equipamentos',icon:'🧰'},
-  kit_crise:{label:'Kit Crise',icon:'🎒'},
-  sdai:{label:'SDAI',icon:'🚨'},
-  cftv:{label:'CFTV',icon:'📹'},
-  lojas:{label:'Lojas',icon:'🏬'},
-  escadas:{label:'Escadas',icon:'🪜'},
-  tarefas:{label:'Tarefas',icon:'✅'},
-  times:{label:'Times',icon:'👥'},
-  documentos:{label:'Documentos',icon:'📄'},
-  ocorrencias:{label:'Ocorrências',icon:'⚠️'},
-  contatos:{label:'Contatos',icon:'📇'}
+const MODULES_META = {
+  extintores: {icon:"🧯", label:"Extintores", dup:true},
+  mangueiras: {icon:"🚒", label:"Mangueiras", dup:true},
+  vgas: {icon:"💧", label:"VGAs", dup:false},
+  abrigos: {icon:"📦", label:"Abrigos", dup:false},
+  outros_equipamentos: {icon:"🛠️", label:"Outros Equipamentos", dup:true},
+  kits_crise: {icon:"🆘", label:"Kit Crise", dup:false},
+  sdais: {icon:"🚨", label:"SDAI", dup:false},
+  cftvs: {icon:"📹", label:"CFTV", dup:false},
+  lojas: {icon:"🏬", label:"Lojas", dup:false},
+  escadas: {icon:"🪜", label:"Escadas", dup:false},
+  tarefas: {icon:"✅", label:"Tarefas", dup:false},
+  times: {icon:"👥", label:"Times", dup:false},
+  documentos: {icon:"📄", label:"Documentos", dup:false},
+  ocorrencias: {icon:"⚠️", label:"Ocorrências", dup:false},
+  contatos: {icon:"📇", label:"Contatos", dup:false}
 };
 
-const DUPLICABLE = ['extintores','mangueiras','outros_equipamentos'];
-let currentTab = 'dashboard';
-let cacheData = {};
+let currentTab = "painel";
+let editingId = null;
+let editingModule = null;
 
-function esc(v){
-  if(v===null||v===undefined) return '';
-  return String(v).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-function badgeForStatus(status){
-  if(!status) return '<span class="badge badge-muted">-</span>';
-  const s = status.toLowerCase();
-  if(['conforme','disponível','disponivel','ativo','ok','resolvido'].includes(s)) return '<span class="badge badge-ok">'+esc(status)+'</span>';
-  if(['não conforme','nao conforme','em manutenção','em manutencao','em andamento','repor','inspecionar','manutenção','manutencao'].includes(s)) return '<span class="badge badge-warn">'+esc(status)+'</span>';
-  if(['inativo','vencido','aberto','não conformidade'].includes(s)) return '<span class="badge badge-danger">'+esc(status)+'</span>';
-  return '<span class="badge badge-info">'+esc(status)+'</span>';
-}
+function api(modulo){ return "/api/" + modulo; }
 
 async function apiGet(url){
   const r = await fetch(url);
-  if(!r.ok) throw new Error('Erro '+r.status);
-  return r.json();
+  return await r.json();
 }
-async function apiPost(url,body){
-  const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
-  if(!r.ok) throw new Error('Erro '+r.status);
-  return r.json();
-}
-async function apiPut(url,body){
-  const r = await fetch(url,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
-  if(!r.ok) throw new Error('Erro '+r.status);
-  return r.json();
-}
-async function apiDelete(url){
-  const r = await fetch(url,{method:'DELETE'});
-  if(!r.ok) throw new Error('Erro '+r.status);
-  return r.json();
-}
-
-function switchTab(tab){
-  currentTab = tab;
-  document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
-  const btns = document.querySelectorAll('.nav-tab');
-  const idx = Object.keys(MODULE_META).indexOf(tab);
-  if(idx>=0 && btns[idx]) btns[idx].classList.add('active');
-  renderTab();
-}
-
-async function renderTab(){
-  const app = document.getElementById('appContent');
-  if(currentTab==='dashboard'){ await renderDashboard(); return; }
-  const meta = MODULE_META[currentTab];
-  try{
-    const data = await apiGet('/api/'+currentTab);
-    cacheData[currentTab] = data;
-    app.innerHTML = renderModuleTable(currentTab, data);
-  }catch(e){
-    app.innerHTML = '<div class="card p-4 text-danger">Erro ao carregar: '+esc(e.message)+'</div>';
-  }
-}
-
-function renderModuleTable(tab, items){
-  const meta = MODULE_META[tab];
-  const dup = DUPLICABLE.includes(tab);
-  let html = '<div class="card"><div class="card-header d-flex justify-content-between align-items-center">'+
-    '<span>'+meta.icon+' '+meta.label+' ('+items.length+')</span>'+
-    '<button class="btn btn-light btn-sm" onclick="openForm(\''+tab+'\',null)"><i class="bi bi-plus-lg"></i> Adicionar</button></div>'+
-    '<div class="card-body p-0"><div class="table-wrap"><table><thead><tr>';
-  const cols = getColumns(tab);
-  cols.forEach(c=> html += '<th>'+esc(c.label)+'</th>');
-  html += '<th>Ações</th></tr></thead><tbody>';
-  if(items.length===0){
-    html += '<tr><td colspan="'+(cols.length+1)+'" class="empty-state">Nenhum registro encontrado.</td></tr>';
-  }
-  items.forEach(it=>{
-    html += '<tr>';
-    cols.forEach(c=>{
-      let val = it[c.field];
-      if(c.field==='status' || c.field==='situacao' || c.field==='estado' || c.field==='grau_risco'){
-        html += '<td>'+badgeForStatus(val)+'</td>';
-      } else if(c.field==='resolvido'){
-        html += '<td>'+(val?'<span class="badge badge-ok">Sim</span>':'<span class="badge badge-muted">Não</span>')+'</td>';
-      } else {
-        html += '<td>'+esc(val)+'</td>';
-      }
-    });
-    html += '<td>';
-    if(dup) html += '<button class="btn btn-sm btn-outline-secondary btn-icon" onclick="duplicateItem(\''+tab+'\','+it.id+')" title="Duplicar"><i class="bi bi-files"></i></button>';
-    html += '<button class="btn btn-sm btn-outline-primary btn-icon" onclick="editItem(\''+tab+'\','+it.id+')" title="Editar"><i class="bi bi-pencil"></i></button>';
-    html += '<button class="btn btn-sm btn-outline-danger btn-icon" onclick="deleteItem(\''+tab+'\','+it.id+')" title="Excluir"><i class="bi bi-trash"></i></button>';
-    html += '</td></tr>';
+async function apiSend(url, method, data){
+  const r = await fetch(url, {
+    method: method,
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify(data)
   });
-  html += '</tbody></table></div></div></div>';
+  return await r.json();
+}
+
+function esc(v){ return (v===null||v===undefined)?"":String(v); }
+
+function selectOpts(options, selected){
+  let s = "<option value=''>Selecione...</option>";
+  options.forEach(o=>{
+    s += `<option value="${o}" ${selected===o?"selected":""}>${o}</option>`;
+  });
+  return s;
+}
+
+function field(label, name, type="text", value="", extra=""){
+  return `<div class="mb-3"><label class="form-label fw-semibold">${label}</label><input type="${type}" class="form-control" id="f_${name}" value="${esc(value)}" ${extra}></div>`;
+}
+function textareaField(label, name, value=""){
+  return `<div class="mb-3"><label class="form-label fw-semibold">${label}</label><textarea class="form-control" id="f_${name}" rows="3">${esc(value)}</textarea></div>`;
+}
+function selectField(label, name, options, value=""){
+  return `<div class="mb-3"><label class="form-label fw-semibold">${label}</label><select class="form-select" id="f_${name}">${selectOpts(options, value)}</select></div>`;
+}
+function checkField(label, name, checked=false){
+  return `<div class="mb-3 form-check"><input type="checkbox" class="form-check-input" id="f_${name}" ${checked?"checked":""}><label class="form-check-label fw-semibold" for="f_${name}">${label}</label></div>`;
+}
+
+function generateFormHTML(modulo, item){
+  const v = item || {};
+  let html = "";
+  if(modulo==="extintores"){
+    html += field("Número Extintor","numero_extintor","text",v.numero_extintor);
+    html += field("Patrimônio","patrimonio","text",v.patrimonio);
+    html += selectField("Classe Incêndio","classe_incendio",["A","B","C","D","K","ABC","BC","Lítio"],v.classe_incendio);
+    html += selectField("Tipo","tipo",["CO2","Pó Químico","Água","Espuma"],v.tipo);
+    html += field("Capacidade","capacidade","text",v.capacidade);
+    html += field("Fabricante","fabricante","text",v.fabricante);
+    html += field("Número Série","numero_serie","text",v.numero_serie);
+    html += field("Data Fabricação","data_fabricacao","date",v.data_fabricacao);
+    html += field("Data Teste Hidrostático","data_teste_hidrostatico","date",v.data_teste_hidrostatico);
+    html += field("Data Validade","data_validade","date",v.data_validade);
+    html += field("Localização","localizacao","text",v.localizacao);
+    html += field("Pavimento","pavimento","text",v.pavimento);
+    html += field("Setor","setor","text",v.setor);
+    html += selectField("Situação","situacao",["Conforme","Não Conforme","Inspecionar"],v.situacao);
+    html += selectField("Status","status",["Disponível","Alocado","Em Manutenção","Inativo"],v.status);
+    html += textareaField("Observações","observacoes",v.observacoes);
+  } else if(modulo==="mangueiras"){
+    html += field("Número Mangueira","numero_mangueira","text",v.numero_mangueira);
+    html += selectField("Tipo","tipo",["1 polegada","1.5 pol","2 pol"],v.tipo);
+    html += field("Comprimento","comprimento","text",v.comprimento);
+    html += field("Diâmetro","diametro","text",v.diametro);
+    html += field("Fabricante","fabricante","text",v.fabricante);
+    html += field("Data Fabricação","data_fabricacao","date",v.data_fabricacao);
+    html += field("Data Último Ensaio","data_ultimo_ensaio","date",v.data_ultimo_ensaio);
+    html += field("Data Validade","data_validade","date",v.data_validade);
+    html += field("Abrigo Hidrante","abrigo_hidrante","text",v.abrigo_hidrante);
+    html += selectField("Situação","situacao",["Conforme","Não Conforme","Inspecionar"],v.situacao);
+    html += selectField("Status","status",["Disponível","Alocado","Em Manutenção","Inativo"],v.status);
+    html += textareaField("Observações","observacoes",v.observacoes);
+  } else if(modulo==="vgas"){
+    html += field("Número VGA","numero_vga","text",v.numero_vga);
+    html += field("Localização","localizacao","text",v.localizacao);
+    html += field("Pavimento","pavimento","text",v.pavimento);
+    html += field("Vazão","vazao","text",v.vazao);
+    html += field("Pressão","pressao","text",v.pressao);
+    html += field("Data Última Inspeção","data_ultima_inspecao","date",v.data_ultima_inspecao);
+    html += field("Situação","situacao","text",v.situacao);
+    html += field("Status","status","text",v.status);
+    html += textareaField("Observações","observacoes",v.observacoes);
+  } else if(modulo==="abrigos"){
+    html += field("Código Abrigo","codigo_abrigo","text",v.codigo_abrigo);
+    html += field("Localização","localizacao","text",v.localizacao);
+    html += field("Pavimento","pavimento","text",v.pavimento);
+    html += field("Setor","setor","text",v.setor);
+    html += selectField("Tem Mangueira","tem_mangueira",["sim","não"],v.tem_mangueira);
+    html += field("Mangueira Alocada","mangueira_alocada","text",v.mangueira_alocada);
+    html += selectField("Tem Chave Storz","tem_chave_storz",["sim","não"],v.tem_chave_storz);
+    html += field("Chave Storz Alocada","chave_storz_alocada","text",v.chave_storz_alocada);
+    html += selectField("Tem Esguicho","tem_esguicho",["sim","não"],v.tem_esguicho);
+    html += field("Esguicho Alocada","esguicho_alocada","text",v.esguicho_alocada);
+    html += selectField("Tem Tampão","tem_tampao",["sim","não"],v.tem_tampao);
+    html += field("Tampão Alocada","tampao_alocada","text",v.tampao_alocada);
+    html += selectField("Tem Redução","tem_reducao",["sim","não"],v.tem_reducao);
+    html += field("Redução Alocada","reducao_alocada","text",v.reducao_alocada);
+    html += selectField("Tem Adaptadores","tem_adaptadores",["sim","não"],v.tem_adaptadores);
+    html += field("Adaptadores Alocados","adaptadores_alocados","text",v.adaptadores_alocados);
+    html += selectField("Tem Registro","tem_registro",["sim","não"],v.tem_registro);
+    html += field("Registro Status","registro_status","text",v.registro_status);
+    html += selectField("Tem Sinalização","tem_sinalizacao",["Conforme","Não Conforme","Inexistente"],v.tem_sinalizacao);
+    html += textareaField("Observações","observacoes",v.observacoes);
+  } else if(modulo==="outros_equipamentos"){
+    html += field("Tipo Equipamento","tipo_equipamento","text",v.tipo_equipamento);
+    html += field("Patrimônio","patrimonio","text",v.patrimonio);
+    html += field("Localização","localizacao","text",v.localizacao);
+    html += field("Data Validade","data_validade","date",v.data_validade);
+    html += field("Situação","situacao","text",v.situacao);
+    html += selectField("Status","status",["Disponível","Alocado","Em Manutenção","Inativo"],v.status);
+    html += textareaField("Observações","observacoes",v.observacoes);
+  } else if(modulo==="kits_crise"){
+    html += field("Item","item","text",v.item);
+    html += field("Quantidade","quantidade","text",v.quantidade);
+    html += field("Localização","localizacao","text",v.localizacao);
+    html += field("Responsável","responsavel","text",v.responsavel);
+    html += selectField("Situação","situacao",["OK","Repor","Vencido"],v.situacao);
+    html += field("Validade","validade","date",v.validade);
+  } else if(modulo==="sdais"){
+    html += field("Código","codigo","text",v.codigo);
+    html += field("Central Alarme","central_alarme","text",v.central_alarme);
+    html += field("Acionadores Manuais","acionadores_manuais","text",v.acionadores_manuais);
+    html += field("Detectores","detectores","text",v.detectores);
+    html += field("Sirenes","sirenes","text",v.sirenes);
+    html += field("Módulos","modulos","text",v.modulos);
+    html += field("Fontes","fontes","text",v.fontes);
+    html += field("Baterias","baterias","text",v.baterias);
+    html += field("Loop","loop","text",v.loop);
+    html += field("Endereçamento","enderecamento","text",v.enderecamento);
+    html += field("Data Último Teste","data_ultimo_teste","date",v.data_ultimo_teste);
+    html += textareaField("Falhas","falhas",v.falhas);
+    html += textareaField("Observações","observacoes",v.observacoes);
+  } else if(modulo==="cftvs"){
+    html += field("Código","codigo","text",v.codigo);
+    html += selectField("Tipo","tipo",["Câmera","DVR","Monitor"],v.tipo);
+    html += field("Marca","marca","text",v.marca);
+    html += field("Modelo","modelo","text",v.modelo);
+    html += field("IP","ip","text",v.ip);
+    html += field("Localização","localizacao","text",v.localizacao);
+    html += selectField("Estado","estado",["Ativo","Inativo","Manutenção"],v.estado);
+    html += field("Garantia","garantia","text",v.garantia);
+    html += field("Data Manutenção","data_manutencao","date",v.data_manutencao);
+    html += textareaField("Observações","observacoes",v.observacoes);
+  } else if(modulo==="lojas"){
+    html += field("Nome Loja","nome_loja","text",v.nome_loja);
+    html += field("Número","numero","text",v.numero);
+    html += field("Segmento","segmento","text",v.segmento);
+    html += field("Responsável","responsavel","text",v.responsavel);
+    html += field("Telefone","telefone","text",v.telefone);
+    html += field("Email","email","text",v.email);
+    html += field("Hidrantes","hidrantes","text",v.hidrantes);
+    html += textareaField("Problemas Encontrados","problemas_encontrados",v.problemas_encontrados);
+    html += field("Data Vistoria","data_vistoria","date",v.data_vistoria);
+    html += selectField("Grau Risco","grau_risco",["Risco 01","Risco 02","Risco 03","Risco 04"],v.grau_risco);
+    html += textareaField("Observações","observacoes",v.observacoes);
+  } else if(modulo==="escadas"){
+    html += field("Código","codigo","text",v.codigo);
+    html += field("Pavimento","pavimento","text",v.pavimento);
+    html += field("Quantidade Portas","quantidade_portas","number",v.quantidade_portas||0);
+    html += selectField("Barra Antipânico","barra_antipanico",["Conforme","Não Conforme"],v.barra_antipanico);
+    html += selectField("Fechadura","fechadura",["Conforme","Não Conforme"],v.fechadura);
+    html += selectField("Molas","molas",["Conforme","Não Conforme"],v.molas);
+    html += selectField("Sinalização","sinalizacao",["Conforme","Não Conforme","Inexistente"],v.sinalizacao);
+    html += field("Situação","situacao","text",v.situacao);
+    html += field("Data Inspeção","data_inspecao","date",v.data_inspecao);
+    html += textareaField("Observações","observacoes",v.observacoes);
+  } else if(modulo==="tarefas"){
+    html += field("Nome","nome","text",v.nome);
+    html += textareaField("Descrição","descricao",v.descricao);
+    html += selectField("Prioridade","prioridade",["Baixa","Média","Alta"],v.prioridade);
+    html += selectField("Categoria","categoria",["Trabalho","Pessoal","Estudo","Saúde","Finanças","Outros"],v.categoria);
+    html += field("Vencimento","vencimento","date",v.vencimento);
+    html += field("Responsável","responsavel","text",v.responsavel);
+    html += checkField("Resolvido","resolvido",v.resolvido===true||v.resolvido==="true");
+  } else if(modulo==="times"){
+    html += selectField("Categoria","categoria",["Interno","Terceiro"],v.categoria);
+    html += field("Nome","nome","text",v.nome);
+    html += field("Cargo","cargo","text",v.cargo);
+    html += field("Empresa","empresa","text",v.empresa);
+    html += field("Certificados","certificados","text",v.certificados);
+    html += field("Data Validade Certificado","data_validade_certificado","date",v.data_validade_certificado);
+    html += field("Telefone","telefone","text",v.telefone);
+    html += field("Email","email","text",v.email);
+    html += field("Escala","escala","text",v.escala);
+    html += textareaField("Observações","observacoes",v.observacoes);
+  } else if(modulo==="documentos"){
+    html += field("Título","titulo","text",v.titulo);
+    html += selectField("Tipo","tipo",["Alvará","LVCB","AVCB","Certificado Brigada","Laudo Técnico","Seguro","Contrato","Outros"],v.tipo);
+    html += field("Data Emissão","data_emissao","date",v.data_emissao);
+    html += field("Data Validade","data_validade","date",v.data_validade);
+    html += field("Órgão Emissor","orgao_emissor","text",v.orgao_emissor);
+    html += field("Arquivo URL","arquivo_url","text",v.arquivo_url);
+    html += textareaField("Observações","observacoes",v.observacoes);
+  } else if(modulo==="ocorrencias"){
+    html += selectField("Tipo","tipo",["Incêndio","Princípio Incêndio","Vazamento","Alarme Falso","Emergência Médica","Outros"],v.tipo);
+    html += field("Data","data","date",v.data);
+    html += field("Hora","hora","time",v.hora);
+    html += field("Local","local","text",v.local);
+    html += textareaField("Descrição","descricao",v.descricao);
+    html += field("Responsável","responsavel","text",v.responsavel);
+    html += textareaField("Providências","providencias",v.providencias);
+    html += selectField("Status","status",["Aberto","Em Andamento","Resolvido"],v.status);
+  } else if(modulo==="contatos"){
+    html += field("Nome","nome","text",v.nome);
+    html += field("Telefone","telefone","text",v.telefone);
+    html += field("Email","email","text",v.email);
+    html += field("Empresa","empresa","text",v.empresa);
+    html += field("Função","funcao","text",v.funcao);
+    html += textareaField("Observações","observacoes",v.observacoes);
+  }
   return html;
 }
 
-function getColumns(tab){
-  const map = {
-    extintores:[{field:'numero_extintor',label:'Nº'},{field:'patrimonio',label:'Patrimônio'},{field:'classe_incendio',label:'Classe'},{field:'tipo',label:'Tipo'},{field:'capacidade',label:'Capacidade'},{field:'localizacao',label:'Localização'},{field:'pavimento',label:'Pav.'},{field:'data_validade',label:'Validade'},{field:'status',label:'Status'}],
-    mangueiras:[{field:'numero_mangueira',label:'Nº'},{field:'tipo',label:'Tipo'},{field:'comprimento',label:'Compr.'},{field:'diametro',label:'Diâm.'},{field:'abrigo_hidrante',label:'Abrigo'},{field:'data_validade',label:'Validade'},{field:'status',label:'Status'}],
-    vgas:[{field:'numero_vga',label:'Nº'},{field:'localizacao',label:'Localização'},{field:'pavimento',label:'Pav.'},{field:'vazao',label:'Vazão'},{field:'pressao',label:'Pressão'},{field:'data_ultima_inspecao',label:'Últ. Inspeção'},{field:'status',label:'Status'}],
-    abrigos:[{field:'codigo_abrigo',label:'Código'},{field:'localizacao',label:'Localização'},{field:'pavimento',label:'Pav.'},{field:'tem_mangueira',label:'Mangueira'},{field:'tem_esguicho',label:'Esguicho'},{field:'tem_sinalizacao',label:'Sinalização'},{field:'situacao',label:'Situação'}],
-    outros_equipamentos:[{field:'tipo_equipamento',label:'Tipo'},{field:'patrimonio',label:'Patrimônio'},{field:'localizacao',label:'Localização'},{field:'data_validade',label:'Validade'},{field:'status',label:'Status'}],
-    kit_crise:[{field:'item',label:'Item'},{field:'quantidade',label:'Qtd'},{field:'localizacao',label:'Localização'},{field:'responsavel',label:'Responsável'},{field:'situacao',label:'Situação'},{field:'validade',label:'Validade'}],
-    sdai:[{field:'codigo',label:'Código'},{field:'central_alarme',label:'Central'},{field:'detectores',label:'Detectores'},{field:'sirenes',label:'Sirenes'},{field:'data_ultimo_teste',label:'Últ. Teste'},{field:'falhas',label:'Falhas'}],
-    cftv:[{field:'codigo',label:'Código'},{field:'tipo',label:'Tipo'},{field:'marca',label:'Marca'},{field:'modelo',label:'Modelo'},{field:'localizacao',label:'Localização'},{field:'estado',label:'Estado'}],
-    lojas:[{field:'nome_loja',label:'Loja'},{field:'numero',label:'Nº'},{field:'segmento',label:'Segmento'},{field:'responsavel',label:'Responsável'},{field:'data_vistoria',label:'Vistoria'},{field:'grau_risco',label:'Risco'}],
-    escadas:[{field:'codigo',label:'Código'},{field:'pavimento',label:'Pav.'},{field:'quantidade_portas',label:'Portas'},{field:'barra_antipanico',label:'Barra Antipânico'},{field:'sinalizacao',label:'Sinalização'},{field:'data_inspecao',label:'Inspeção'}],
-    tarefas:[{field:'nome',label:'Nome'},{field:'prioridade',label:'Prioridade'},{field:'categoria',label:'Categoria'},{field:'vencimento',label:'Vencimento'},{field:'responsavel',label:'Responsável'},{field:'resolvido',label:'Resolvido'}],
-    times:[{field:'categoria',label:'Categoria'},{field:'nome',label:'Nome'},{field:'cargo',label:'Cargo'},{field:'empresa',label:'Empresa'},{field:'data_validade_certificado',label:'Validade Cert.'},{field:'telefone',label:'Telefone'}],
-    documentos:[{field:'titulo',label:'Título'},{field:'tipo',label:'Tipo'},{field:'data_emissao',label:'Emissão'},{field:'data_validade',label:'Validade'},{field:'orgao_emissor',label:'Órgão'}],
-    ocorrencias:[{field:'tipo',label:'Tipo'},{field:'data',label:'Data'},{field:'hora',label:'Hora'},{field:'local',label:'Local'},{field:'responsavel',label:'Responsável'},{field:'status',label:'Status'}],
-    contatos:[{field:'nome',label:'Nome'},{field:'telefone',label:'Telefone'},{field:'email',label:'E-mail'},{field:'empresa',label:'Empresa'},{field:'funcao',label:'Função'}]
-  };
-  return map[tab]||[];
-}
-
-async function renderDashboard(){
-  const app = document.getElementById('appContent');
-  try{
-    const dash = await apiGet('/api/dashboard');
-    const alertas = await apiGet('/api/alertas');
-    let totalGeral = 0;
-    Object.values(dash.counts).forEach(c=> totalGeral += c);
-
-    let html = '<div class="kpi-grid">';
-    html += kpiCard('Total Geral', totalGeral, '');
-    html += kpiCard('Itens Vencidos', dash.total_vencidos, 'danger');
-    html += kpiCard('Tarefas Pendentes', dash.tarefas_pendentes, 'warning');
-    html += kpiCard('Total Alertas', dash.total_alertas, 'info');
-    html += '</div>';
-
-    html += '<div class="card"><div class="card-header">⚠️ Alertas Críticos</div><div class="card-body">';
-    let hasAlert = false;
-    Object.keys(alertas).forEach(mod=>{
-      alertas[mod].forEach(it=>{
-        hasAlert = true;
-        const venc = it._vencido;
-        const label = MODULE_META[mod]?MODULE_META[mod].label:mod;
-        const nome = it.numero_extintor||it.numero_mangueira||it.numero_vga||it.codigo_abrigo||it.tipo_equipamento||it.item||it.codigo||it.titulo||it.nome||('#'+it.id);
-        html += '<div class="alert-item '+(venc?'':'warn')+'"><div><strong>'+esc(label)+'</strong> — '+esc(nome)+' <span class="badge '+(venc?'badge-danger':'badge-warn')+'">'+(venc?'Vencido':'Vence em breve')+'</span><br><small class="text-muted">Validade: '+esc(it._data_validade)+'</small></div>'+
-          '<button class="btn btn-sm btn-primary" onclick="switchTab(\''+mod+'\')">Ver</button></div>';
-      });
-    });
-    if(!hasAlert) html += '<div class="empty-state">Nenhum alerta crítico. 🎉</div>';
-    html += '</div></div>';
-
-    html += '<div class="card"><div class="card-header">🕐 Últimas Movimentações</div><div class="card-body p-0"><div class="table-wrap"><table><thead><tr><th>Módulo</th><th>Item ID</th><th>Ação</th><th>Data</th><th>Observações</th></tr></thead><tbody>';
-    if(dash.historico.length===0){
-      html += '<tr><td colspan="5" class="empty-state">Sem movimentações.</td></tr>';
-    }
-    dash.historico.forEach(h=>{
-      html += '<tr><td>'+esc(h.modulo)+'</td><td>'+esc(h.item_id)+'</td><td>'+esc(h.acao)+'</td><td>'+esc(h.data)+'</td><td>'+esc(h.observacoes)+'</td></tr>';
-    });
-    html += '</tbody></table></div></div></div>';
-    app.innerHTML = html;
-  }catch(e){
-    app.innerHTML = '<div class="card p-4 text-danger">Erro ao carregar dashboard: '+esc(e.message)+'</div>';
-  }
-}
-
-function kpiCard(label,value,cls){
-  return '<div class="kpi '+cls+'"><div class="label">'+label+'</div><div class="value">'+esc(value)+'</div></div>';
-}
-
-function openForm(tab,id){
-  let item = {};
-  if(id){
-    const data = cacheData[tab]||[];
-    item = data.find(i=>i.id===id) || {};
-  }
-  const meta = MODULE_META[tab];
-  const box = document.getElementById('modalBox');
-  let html = '<div class="d-flex justify-content-between align-items-center mb-3">'+
-    '<h4 class="m-0" style="color:var(--primary)">'+meta.icon+' '+(id?'Editar':'Adicionar')+' '+meta.label+'</h4>'+
-    '<button class="btn-close" onclick="closeModal()"></button></div>';
-  html += '<form id="itemForm">';
-  html += generateFormHTML(tab, item);
-  html += '<div class="d-flex justify-content-end gap-2 mt-3">';
-  html += '<button type="button" class="btn btn-secondary" onclick="closeModal()">Cancelar</button>';
-  html += '<button type="button" class="btn btn-primary" onclick="saveItem(\''+tab+'\','+(id||'null')+')"><i class="bi bi-check-lg"></i> Salvar</button>';
-  html += '</div></form>';
-  box.innerHTML = html;
-  document.getElementById('modalOverlay').classList.add('show');
-}
-
-function closeModal(){
-  document.getElementById('modalOverlay').classList.remove('show');
-}
-
-function editItem(tab,id){ openForm(tab,id); }
-
-function field(label, inner){
-  return '<div class="mb-2"><label class="form-label">'+label+'</label>'+inner+'</div>';
-}
-function inp(name,val,type='text'){ return '<input type="'+type+'" class="form-control" id="f_'+name+'" name="'+name+'" value="'+esc(val||'')+'">'; }
-function sel(name,val,opts){
-  let h = '<select class="form-select" id="f_'+name+'" name="'+name+'">';
-  h += '<option value="">-- Selecione --</option>';
-  opts.forEach(o=>{ const ov = typeof o==='object'?o.value:o; const ol = typeof o==='object'?o.label:o; h += '<option value="'+esc(ov)+'" '+(val==ov?'selected':'')+'>'+esc(ol)+'</option>'; });
-  h += '</select>'; return h;
-}
-function ta(name,val){ return '<textarea class="form-control" id="f_'+name+'" name="'+name+'" rows="3">'+esc(val||'')+'</textarea>'; }
-function chk(name,val){ return '<div class="form-check"><input class="form-check-input" type="checkbox" id="f_'+name+'" name="'+name+'" '+(val?'checked':'')+'><label class="form-check-label" for="f_'+name+'">Sim</label></div>'; }
-
-function generateFormHTML(tab, item){
-  let h = '<div class="row">';
-  const col = (inner, size=6)=> '<div class="col-md-'+size+'">'+inner+'</div>';
-
-  if(tab==='extintores'){
-    h += col(field('Número Extintor', inp('numero_extintor',item.numero_extintor)));
-    h += col(field('Patrimônio', inp('patrimonio',item.patrimonio)));
-    h += col(field('Classe Incêndio', sel('classe_incendio',item.classe_incendio,['A','B','C','D','K','ABC','BC','Lítio'])));
-    h += col(field('Tipo', sel('tipo',item.tipo,['CO2','Pó Químico','Água','Espuma'])));
-    h += col(field('Capacidade', inp('capacidade',item.capacidade)));
-    h += col(field('Fabricante', inp('fabricante',item.fabricante)));
-    h += col(field('Número de Série', inp('numero_serie',item.numero_serie)));
-    h += col(field('Data Fabricação', inp('data_fabricacao',item.data_fabricacao,'date')));
-    h += col(field('Data Teste Hidrostático', inp('data_teste_hidrostatico',item.data_teste_hidrostatico,'date')));
-    h += col(field('Data Validade', inp('data_validade',item.data_validade,'date')));
-    h += col(field('Localização', inp('localizacao',item.localizacao)));
-    h += col(field('Pavimento', inp('pavimento',item.pavimento)));
-    h += col(field('Setor', inp('setor',item.setor)));
-    h += col(field('Situação', sel('situacao',item.situacao,['Conforme','Não Conforme','Inspecionar'])));
-    h += col(field('Status', sel('status',item.status,['Disponível','Alocado','Em Manutenção','Inativo'])));
-    h += '<div class="col-12">'+field('Observações', ta('observacoes',item.observacoes))+'</div>';
-  }
-  else if(tab==='mangueiras'){
-    h += col(field('Número Mangueira', inp('numero_mangueira',item.numero_mangueira)));
-    h += col(field('Tipo', sel('tipo',item.tipo,['1 polegada','1.5 pol','2 pol'])));
-    h += col(field('Comprimento', inp('comprimento',item.comprimento)));
-    h += col(field('Diâmetro', inp('diametro',item.diametro)));
-    h += col(field('Fabricante', inp('fabricante',item.fabricante)));
-    h += col(field('Data Fabricação', inp('data_fabricacao',item.data_fabricacao,'date')));
-    h += col(field('Data Último Ensaio', inp('data_ultimo_ensaio',item.data_ultimo_ensaio,'date')));
-    h += col(field('Data Validade', inp('data_validade',item.data_validade,'date')));
-    h += col(field('Abrigo Hidrante', inp('abrigo_hidrante',item.abrigo_hidrante)));
-    h += col(field('Situação', sel('situacao',item.situacao,['Conforme','Não Conforme','Inspecionar'])));
-    h += col(field('Status', sel('status',item.status,['Disponível','Alocado','Em Manutenção','Inativo'])));
-    h += '<div class="col-12">'+field('Observações', ta('observacoes',item.observacoes))+'</div>';
-  }
-  else if(tab==='vgas'){
-    h += col(field('Número VGA', inp('numero_vga',item.numero_vga)));
-    h += col(field('Localização', inp('localizacao',item.localizacao)));
-    h += col(field('Pavimento', inp('pavimento',item.pavimento)));
-    h += col(field('Vazão', inp('vazao',item.vazao)));
-    h += col(field('Pressão', inp('pressao',item.pressao)));
-    h += col(field('Data Última Inspeção', inp('data_ultima_inspecao',item.data_ultima_inspecao,'date')));
-    h += col(field('Situação', sel('situacao',item.situacao,['Conforme','Não Conforme','Inspecionar'])));
-    h += col(field('Status', sel('status',item.status,['Disponível','Alocado','Em Manutenção','Inativo'])));
-    h += '<div class="col-12">'+field('Observações', ta('observacoes',item.observacoes))+'</div>';
-  }
-  else if(tab==='abrigos'){
-    h += col(field('Código Abrigo', inp('codigo_abrigo',item.codigo_abrigo)));
-    h += col(field('Localização', inp('localizacao',item.localizacao)));
-    h += col(field('Pavimento', inp('pavimento',item.pavimento)));
-    h += col(field('Setor', inp('setor',item.setor)));
-    h += col(field('Tem Mangueira?', sel('tem_mangueira',item.tem_mangueira,['sim','não'])));
-    h += col(field('Mangueira Alocada', inp('mangueira_alocada',item.mangueira_alocada)));
-    h += col(field('Tem Chave Storz?', sel('tem_chave_storz',item.tem_chave_storz,['sim','não'])));
-    h += col(field('Chave Storz Alocada', inp('chave_storz_alocada',item.chave_storz_alocada)));
-    h += col(field('Tem Esguicho?', sel('tem_esguicho',item.tem_esguicho,['sim','não'])));
-    h += col(field('Esguicho Alocada', inp('esguicho_alocada',item.esguicho_alocada)));
-    h += col(field('Tampão?', sel('tem_tampao',item.tem_tampao,['sim','não'])));
-    h += col(field('Tampão Alocada', inp('tampao_alocada',item.tampao_alocada)));
-    h += col(field('Tem Redução?', sel('tem_reducao',item.tem_reducao,['sim','não'])));
-    h += col(field('Redução Alocada', inp('reducao_alocada',item.reducao_alocada)));
-    h += col(field('Tem Adaptadores?', sel('tem_adaptadores',item.tem_adaptadores,['sim','não'])));
-    h += col(field('Adaptadores Alocados', inp('adaptadores_alocados',item.adaptadores_alocados)));
-    h += col(field('Tem Registro?', sel('tem_registro',item.tem_registro,['sim','não'])));
-    h += col(field('Registro Status', inp('registro_status',item.registro_status)));
-    h += col(field('Sinalização', sel('tem_sinalizacao',item.tem_sinalizacao,['Conforme','Não Conforme','Inexistente'])));
-    h += '<div class="col-12">'+field('Observações', ta('observacoes',item.observacoes))+'</div>';
-  }
-  else if(tab==='outros_equipamentos'){
-    h += col(field('Tipo Equipamento', inp('tipo_equipamento',item.tipo_equipamento)));
-    h += col(field('Patrimônio', inp('patrimonio',item.patrimonio)));
-    h += col(field('Localização', inp('localizacao',item.localizacao)));
-    h += col(field('Data Validade', inp('data_validade',item.data_validade,'date')));
-    h += col(field('Situação', sel('situacao',item.situacao,['Conforme','Não Conforme','Inspecionar'])));
-    h += col(field('Status', sel('status',item.status,['Disponível','Alocado','Em Manutenção','Inativo'])));
-    h += '<div class="col-12">'+field('Observações', ta('observacoes',item.observacoes))+'</div>';
-  }
-  else if(tab==='kit_crise'){
-    h += col(field('Item', inp('item',item.item)));
-    h += col(field('Quantidade', inp('quantidade',item.quantidade)));
-    h += col(field('Localização', inp('localizacao',item.localizacao)));
-    h += col(field('Responsável', inp('responsavel',item.responsavel)));
-    h += col(field('Situação', sel('situacao',item.situacao,['OK','Repor','Vencido'])));
-    h += col(field('Validade', inp('validade',item.validade,'date')));
-  }
-  else if(tab==='sdai'){
-    h += col(field('Código', inp('codigo',item.codigo)));
-    h += col(field('Central de Alarme', inp('central_alarme',item.central_alarme)));
-    h += col(field('Acionadores Manuais', inp('acionadores_manuais',item.acionadores_manuais)));
-    h += col(field('Detectores', inp('detectores',item.detectores)));
-    h += col(field('Sirenes', inp('sirenes',item.sirenes)));
-    h += col(field('Módulos', inp('modulos',item.modulos)));
-    h += col(field('Fontes', inp('fontes',item.fontes)));
-    h += col(field('Baterias', inp('baterias',item.baterias)));
-    h += col(field('Loop', inp('loop',item.loop)));
-    h += col(field('Endereçamento', inp('enderecamento',item.enderecamento)));
-    h += col(field('Data Último Teste', inp('data_ultimo_teste',item.data_ultimo_teste,'date')));
-    h += '<div class="col-12">'+field('Falhas', ta('falhas',item.falhas))+'</div>';
-    h += '<div class="col-12">'+field('Observações', ta('observacoes',item.observacoes))+'</div>';
-  }
-  else if(tab==='cftv'){
-    h += col(field('Código', inp('codigo',item.codigo)));
-    h += col(field('Tipo', sel('tipo',item.tipo,['Câmera','DVR','Monitor'])));
-    h += col(field('Marca', inp('marca',item.marca)));
-    h += col(field('Modelo', inp('modelo',item.modelo)));
-    h += col(field('IP', inp('ip',item.ip)));
-    h += col(field('Localização', inp('localizacao',item.localizacao)));
-    h += col(field('Estado', sel('estado',item.estado,['Ativo','Inativo','Manutenção'])));
-    h += col(field('Garantia', inp('garantia',item.garantia)));
-    h += col(field('Data Manutenção', inp('data_manutencao',item.data_manutencao,'date')));
-    h += '<div class="col-12">'+field('Observações', ta('observacoes',item.observacoes))+'</div>';
-  }
-  else if(tab==='lojas'){
-    h += col(field('Nome da Loja', inp('nome_loja',item.nome_loja)));
-    h += col(field('Número', inp('numero',item.numero)));
-    h += col(field('Segmento', inp('segmento',item.segmento)));
-    h += col(field('Responsável', inp('responsavel',item.responsavel)));
-    h += col(field('Telefone', inp('telefone',item.telefone)));
-    h += col(field('E-mail', inp('email',item.email)));
-    h += col(field('Hidrantes', inp('hidrantes',item.hidrantes)));
-    h += col(field('Data Vistoria', inp('data_vistoria',item.data_vistoria,'date')));
-    h += col(field('Grau de Risco', sel('grau_risco',item.grau_risco,['Risco 01','Risco 02','Risco 03','Risco 04'])));
-    h += '<div class="col-12">'+field('Problemas Encontrados', ta('problemas_encontrados',item.problemas_encontrados))+'</div>';
-    h += '<div class="col-12">'+field('Observações', ta('observacoes',item.observacoes))+'</div>';
-  }
-  else if(tab==='escadas'){
-    h += col(field('Código', inp('codigo',item.codigo)));
-    h += col(field('Pavimento', inp('pavimento',item.pavimento)));
-    h += col(field('Quantidade de Portas', inp('quantidade_portas',item.quantidade_portas,'number')));
-    h += col(field('Barra Antipânico', sel('barra_antipanico',item.barra_antipanico,['Conforme','Não Conforme'])));
-    h += col(field('Fechadura', sel('fechadura',item.fechadura,['Conforme','Não Conforme'])));
-    h += col(field('Molas', sel('molas',item.molas,['Conforme','Não Conforme'])));
-    h += col(field('Sinalização', sel('sinalizacao',item.sinalizacao,['Conforme','Não Conforme','Inexistente'])));
-    h += col(field('Situação', inp('situacao',item.situacao)));
-    h += col(field('Data Inspeção', inp('data_inspecao',item.data_inspecao,'date')));
-    h += '<div class="col-12">'+field('Observações', ta('observacoes',item.observacoes))+'</div>';
-  }
-  else if(tab==='tarefas'){
-    h += col(field('Nome', inp('nome',item.nome)));
-    h += col(field('Prioridade', sel('prioridade',item.prioridade,['Baixa','Média','Alta'])));
-    h += col(field('Categoria', sel('categoria',item.categoria,['Trabalho','Pessoal','Estudo','Saúde','Finanças','Outros'])));
-    h += col(field('Vencimento', inp('vencimento',item.vencimento,'date')));
-    h += col(field('Responsável', inp('responsavel',item.responsavel)));
-    h += col(field('Resolvido', chk('resolvido',item.resolvido)));
-    h += '<div class="col-12">'+field('Descrição', ta('descricao',item.descricao))+'</div>';
-    if(item.criado_em) h += '<div class="col-12">'+field('Criado em', inp('criado_em',item.criado_em,'text'))+'</div>';
-  }
-  else if(tab==='times'){
-    h += col(field('Categoria', sel('categoria',item.categoria,['Interno','Terceiro'])));
-    h += col(field('Nome', inp('nome',item.nome)));
-    h += col(field('Cargo', inp('cargo',item.cargo)));
-    h += col(field('Empresa', inp('empresa',item.empresa)));
-    h += col(field('Certificados', inp('certificados',item.certificados)));
-    h += col(field('Validade Certificado', inp('data_validade_certificado',item.data_validade_certificado,'date')));
-    h += col(field('Telefone', inp('telefone',item.telefone)));
-    h += col(field('E-mail', inp('email',item.email)));
-    h += col(field('Escala', inp('escala',item.escala)));
-    h += '<div class="col-12">'+field('Observações', ta('observacoes',item.observacoes))+'</div>';
-  }
-  else if(tab==='documentos'){
-    h += col(field('Título', inp('titulo',item.titulo)));
-    h += col(field('Tipo', sel('tipo',item.tipo,['Alvará','LVCB','AVCB','Certificado Brigada','Laudo Técnico','Seguro','Contrato','Outros'])));
-    h += col(field('Data Emissão', inp('data_emissao',item.data_emissao,'date')));
-    h += col(field('Data Validade', inp('data_validade',item.data_validade,'date')));
-    h += col(field('Órgão Emissor', inp('orgao_emissor',item.orgao_emissor)));
-    h += col(field('Arquivo URL', inp('arquivo_url',item.arquivo_url)));
-    h += '<div class="col-12">'+field('Observações', ta('observacoes',item.observacoes))+'</div>';
-  }
-  else if(tab==='ocorrencias'){
-    h += col(field('Tipo', sel('tipo',item.tipo,['Incêndio','Princípio Incêndio','Vazamento','Alarme Falso','Emergência Médica','Outros'])));
-    h += col(field('Data', inp('data',item.data,'date')));
-    h += col(field('Hora', inp('hora',item.hora,'time')));
-    h += col(field('Local', inp('local',item.local)));
-    h += col(field('Responsável', inp('responsavel',item.responsavel)));
-    h += col(field('Status', sel('status',item.status,['Aberto','Em Andamento','Resolvido'])));
-    h += '<div class="col-12">'+field('Descrição', ta('descricao',item.descricao))+'</div>';
-    h += '<div class="col-12">'+field('Providências', ta('providencias',item.providencias))+'</div>';
-  }
-  else if(tab==='contatos'){
-    h += col(field('Nome', inp('nome',item.nome)));
-    h += col(field('Telefone', inp('telefone',item.telefone)));
-    h += col(field('E-mail', inp('email',item.email)));
-    h += col(field('Empresa', inp('empresa',item.empresa)));
-    h += col(field('Função', inp('funcao',item.funcao)));
-    h += '<div class="col-12">'+field('Observações', ta('observacoes',item.observacoes))+'</div>';
-  }
-  else {
-    h += '<div class="col-12">Formulário não implementado.</div>';
-  }
-
-  h += '</div>';
-  return h;
-}
-
-function collectFormData(tab){
-  const form = document.getElementById('itemForm');
+function collectFormData(){
   const data = {};
-  form.querySelectorAll('[id^="f_"]').forEach(el=>{
-    const name = el.id.substring(2);
-    if(el.type==='checkbox'){
-      data[name] = el.checked;
+  const form = document.getElementById("dynamicForm");
+  form.querySelectorAll("[id^='f_']").forEach(el=>{
+    const key = el.id.substring(2);
+    if(el.type==="checkbox"){
+      data[key] = el.checked;
+    } else if(el.type==="number"){
+      data[key] = el.value===""?0:parseInt(el.value,10);
     } else {
-      data[name] = el.value;
+      data[key] = el.value;
     }
   });
   return data;
 }
 
-async function saveItem(tab,id){
-  const data = collectFormData(tab);
+async function saveItem(){
+  if(!editingModule) return;
+  const data = collectFormData();
+  let url = api(editingModule);
+  let method = "POST";
+  if(editingId){
+    url = api(editingModule) + "/" + editingId;
+    method = "PUT";
+  }
   try{
-    if(id){
-      await apiPut('/api/'+tab+'/'+id, data);
-    } else {
-      await apiPost('/api/'+tab, data);
-    }
-    closeModal();
-    await renderTab();
+    await apiSend(url, method, data);
+    bootstrap.Modal.getInstance(document.getElementById("formModal")).hide();
+    loadTab(editingModule);
   }catch(e){
-    alert('Erro ao salvar: '+e.message);
+    alert("Erro ao salvar: "+e);
   }
 }
 
-async function deleteItem(tab,id){
-  if(!confirm('Confirma a exclusão deste registro?')) return;
-  try{
-    await apiDelete('/api/'+tab+'/'+id);
-    await renderTab();
-  }catch(e){
-    alert('Erro ao excluir: '+e.message);
-  }
+function openModal(modulo, item){
+  editingModule = modulo;
+  editingId = item?item.id:null;
+  const meta = MODULES_META[modulo] || {label:modulo};
+  document.getElementById("modalTitle").textContent = (item?"Editar ":"Adicionar ") + meta.label;
+  document.getElementById("dynamicForm").innerHTML = generateFormHTML(modulo, item);
+  new bootstrap.Modal(document.getElementById("formModal")).show();
 }
 
-async function duplicateItem(tab,id){
-  try{
-    await apiPost('/api/'+tab+'/'+id+'/duplicar',{});
-    await renderTab();
-  }catch(e){
-    alert('Erro ao duplicar: '+e.message);
-  }
+async function deleteItem(modulo, id){
+  if(!confirm("Confirma exclusão?")) return;
+  await apiSend(api(modulo)+"/"+id, "DELETE", {});
+  loadTab(modulo);
 }
 
-document.getElementById('modalOverlay').addEventListener('click',function(e){
-  if(e.target===this) closeModal();
+async function duplicateItem(modulo, id){
+  await apiSend(api(modulo)+"/"+id+"/duplicar", "POST", {});
+  loadTab(modulo);
+}
+
+function actionBtns(modulo, item){
+  const meta = MODULES_META[modulo] || {dup:false};
+  let s = `<button class="btn btn-sm btn-outline-primary" onclick="openModal('${modulo}',${JSON.stringify(item).replace(/"/g,'&quot;')})"><i class="bi bi-pencil"></i></button> `;
+  if(meta.dup){
+    s += `<button class="btn btn-sm btn-outline-secondary" onclick="duplicateItem('${modulo}',${item.id})"><i class="bi bi-files"></i></button> `;
+  }
+  s += `<button class="btn btn-sm btn-outline-danger" onclick="deleteItem('${modulo}',${item.id})"><i class="bi bi-trash"></i></button>`;
+  return s;
+}
+
+function tableHTML(modulo, items, columns){
+  const meta = MODULES_META[modulo] || {icon:"",label:modulo};
+  let html = `<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">${meta.icon} ${meta.label} (${items.length})</h4>
+    <button class="btn btn-sec" onclick="openModal('${modulo}',null)"><i class="bi bi-plus-lg"></i> Adicionar</button>
+  </div>`;
+  if(items.length===0){
+    html += `<div class="alert alert-info">Nenhum registro encontrado.</div>`;
+    return html;
+  }
+  html += `<div class="table-responsive"><table class="table table-hover module-card"><thead><tr>`;
+  columns.forEach(c=> html += `<th>${c.label}</th>`);
+  html += `<th>Ações</th></tr></thead><tbody>`;
+  items.forEach(it=>{
+    html += `<tr>`;
+    columns.forEach(c=> html += `<td>${esc(it[c.key])}</td>`);
+    html += `<td>${actionBtns(modulo, it)}</td></tr>`;
+  });
+  html += `</tbody></table></div>`;
+  return html;
+}
+
+const COLUMNS = {
+  extintores: [
+    {key:"numero_extintor",label:"Nº"},{key:"classe_incendio",label:"Classe"},{key:"tipo",label:"Tipo"},
+    {key:"capacidade",label:"Capac."},{key:"localizacao",label:"Local"},{key:"data_validade",label:"Validade"},{key:"status",label:"Status"}
+  ],
+  mangueiras: [
+    {key:"numero_mangueira",label:"Nº"},{key:"tipo",label:"Tipo"},{key:"comprimento",label:"Comp."},
+    {key:"diametro",label:"Diâm."},{key:"abrigo_hidrante",label:"Abrigo"},{key:"data_validade",label:"Validade"},{key:"status",label:"Status"}
+  ],
+  vgas: [
+    {key:"numero_vga",label:"Nº"},{key:"localizacao",label:"Local"},{key:"vazao",label:"Vazão"},
+    {key:"pressao",label:"Pressão"},{key:"data_ultima_inspecao",label:"Inspeção"},{key:"status",label:"Status"}
+  ],
+  abrigos: [
+    {key:"codigo_abrigo",label:"Código"},{key:"localizacao",label:"Local"},{key:"pavimento",label:"Pav."},
+    {key:"setor",label:"Setor"},{key:"tem_mangueira",label:"Mangueira"},{key:"tem_sinalizacao",label:"Sinalização"}
+  ],
+  outros_equipamentos: [
+    {key:"tipo_equipamento",label:"Tipo"},{key:"patrimonio",label:"Patrim."},{key:"localizacao",label:"Local"},
+    {key:"data_validade",label:"Validade"},{key:"status",label:"Status"}
+  ],
+  kits_crise: [
+    {key:"item",label:"Item"},{key:"quantidade",label:"Qtd"},{key:"localizacao",label:"Local"},
+    {key:"responsavel",label:"Resp."},{key:"situacao",label:"Situação"},{key:"validade",label:"Validade"}
+  ],
+  sdais: [
+    {key:"codigo",label:"Código"},{key:"central_alarme",label:"Central"},{key:"localizacao",label:"Local"},
+    {key:"data_ultimo_teste",label:"Últ. Teste"},{key:"falhas",label:"Falhas"}
+  ],
+  cftvs: [
+    {key:"codigo",label:"Código"},{key:"tipo",label:"Tipo"},{key:"marca",label:"Marca"},
+    {key:"modelo",label:"Modelo"},{key:"localizacao",label:"Local"},{key:"estado",label:"Estado"}
+  ],
+  lojas: [
+    {key:"nome_loja",label:"Loja"},{key:"numero",label:"Nº"},{key:"segmento",label:"Segmento"},
+    {key:"responsavel",label:"Resp."},{key:"data_vistoria",label:"Vistoria"},{key:"grau_risco",label:"Risco"}
+  ],
+  escadas: [
+    {key:"codigo",label:"Código"},{key:"pavimento",label:"Pav."},{key:"quantidade_portas",label:"Portas"},
+    {key:"barra_antipanico",label:"Antipânico"},{key:"sinalizacao",label:"Sinalização"},{key:"data_inspecao",label:"Inspeção"}
+  ],
+  tarefas: [
+    {key:"nome",label:"Nome"},{key:"prioridade",label:"Prioridade"},{key:"categoria",label:"Categoria"},
+    {key:"vencimento",label:"Vencimento"},{key:"responsavel",label:"Resp."},{key:"resolvido",label:"Resolvido"}
+  ],
+  times: [
+    {key:"nome",label:"Nome"},{key:"cargo",label:"Cargo"},{key:"empresa",label:"Empresa"},
+    {key:"categoria",label:"Categoria"},{key:"data_validade_certificado",label:"Certificado"}
+  ],
+  documentos: [
+    {key:"titulo",label:"Título"},{key:"tipo",label:"Tipo"},{key:"orgao_emissor",label:"Emissor"},
+    {key:"data_validade",label:"Validade"}
+  ],
+  ocorrencias: [
+    {key:"tipo",label:"Tipo"},{key:"data",label:"Data"},{key:"hora",label:"Hora"},
+    {key:"local",label:"Local"},{key:"status",label:"Status"}
+  ],
+  contatos: [
+    {key:"nome",label:"Nome"},{key:"telefone",label:"Telefone"},{key:"email",label:"Email"},
+    {key:"empresa",label:"Empresa"},{key:"funcao",label:"Função"}
+  ]
+};
+
+async function renderDashboard(){
+  const data = await apiGet("/api/dashboard");
+  const stats = data.stats || {};
+  const alertas = data.alertas || [];
+  const movs = data.movimentacoes || [];
+  let html = `<h4 class="mb-3">📊 Painel</h4>`;
+  html += `<div class="row g-3 mb-4">`;
+  const kpis = [
+    {label:"Extintores", val:stats.extintores||0, icon:"🧯"},
+    {label:"Mangueiras", val:stats.mangueiras||0, icon:"🚒"},
+    {label:"Lojas", val:stats.lojas||0, icon:"🏬"},
+    {label:"Tarefas", val:stats.tarefas||0, icon:"✅"}
+  ];
+  kpis.forEach(k=>{
+    html += `<div class="col-md-3 col-6"><div class="card kpi-card"><div class="card-body">
+      <div class="kpi-label">${k.icon} ${k.label}</div>
+      <div class="kpi-num">${k.val}</div></div></div></div>`;
+  });
+  html += `</div>`;
+  html += `<div class="row g-3"><div class="col-md-6">
+    <div class="card module-card"><div class="card-body">
+    <h6 class="fw-bold mb-3">⚠️ Alertas de Vencimento</h6>`;
+  if(alertas.length===0){ html += `<p class="text-muted">Nenhum alerta.</p>`; }
+  else {
+    alertas.slice(0,10).forEach(a=>{
+      html += `<div class="alert alert-danger alert-item py-2 d-flex justify-content-between align-items-center">
+        <span>${esc(a.descricao)}</span>
+        <button class="btn btn-sm btn-outline-danger" onclick="switchTab('${a.modulo}')">Ver</button></div>`;
+    });
+  }
+  html += `</div></div></div>`;
+  html += `<div class="col-md-6"><div class="card module-card"><div class="card-body">
+    <h6 class="fw-bold mb-3">📋 Últimas Movimentações</h6>`;
+  if(movs.length===0){ html += `<p class="text-muted">Sem registros.</p>`; }
+  else {
+    html += `<ul class="list-group list-group-flush">`;
+    movs.forEach(m=>{
+      html += `<li class="list-group-item px-0 d-flex justify-content-between">
+        <span><span class="badge bg-secondary">${esc(m.modulo)}</span> ${esc(m.acao)} #${esc(m.item_id)}</span>
+        <small class="text-muted">${esc((m.data||"").substring(0,16))}</small></li>`;
+    });
+    html += `</ul>`;
+  }
+  html += `</div></div></div></div>`;
+  document.getElementById("content-area").innerHTML = html;
+}
+
+async function loadTab(tab){
+  currentTab = tab;
+  if(tab==="painel"){ await renderDashboard(); return; }
+  const items = await apiGet(api(tab));
+  const cols = COLUMNS[tab] || [];
+  document.getElementById("content-area").innerHTML = tableHTML(tab, items, cols);
+}
+
+function switchTab(tab){
+  document.querySelectorAll("#mainTabs .nav-link").forEach(b=>{
+    b.classList.toggle("active", b.dataset.tab===tab);
+  });
+  loadTab(tab);
+}
+
+document.querySelectorAll("#mainTabs .nav-link").forEach(b=>{
+  b.addEventListener("click", ()=> switchTab(b.dataset.tab));
 });
 
-window.addEventListener('DOMContentLoaded',()=>{
-  switchTab('dashboard');
-});
+loadTab("painel");
 </script>
 </body>
-</html>'''
+</html>
+'''
+
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=PORT)
